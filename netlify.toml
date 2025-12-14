@@ -1,0 +1,18 @@
+# Netlify 配置文件
+# 用于优化 Next.js 项目的部署
+
+[build]
+  # 构建命令
+  command = "npm run build"
+  # 发布目录（Next.js 会自动处理，但这里指定一下）
+  publish = ".next"
+
+[build.environment]
+  # Node.js 版本
+  NODE_VERSION = "18"
+
+# 注意：Next.js 在 Netlify 上需要使用 @netlify/plugin-nextjs 插件
+# 在 Netlify 控制台安装插件，或使用以下配置：
+# [plugins]
+#   package = "@netlify/plugin-nextjs"
+

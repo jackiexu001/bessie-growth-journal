@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-inter: 'Inter', system-ui, sans-serif;
+  --font-playfair: 'Playfair Display', serif;
+}
+
+@layer base {
+  body {
+    @apply bg-gradient-to-br from-soft-pink via-white to-soft-blue min-h-screen;
+    font-family: var(--font-inter);
+  }
+}
+
+@layer components {
+  .card-hover {
+    @apply transition-all duration-300 hover:scale-105 hover:shadow-xl;
+  }
+  
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary-500 to-primary-700 bg-clip-text text-transparent;
+  }
+  
+  .glass-effect {
+    @apply bg-white/80 backdrop-blur-md border border-white/20;
+  }
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-primary-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-primary-400;
+}
+
+/* 图片加载动画 */
+.image-loading {
+  @apply animate-pulse bg-gray-200;
+}
+
+/* 视频容器 */
+.video-container {
+  @apply relative w-full h-0 pb-[56.25%]; /* 16:9 aspect ratio */
+}
+
+.video-container video {
+  @apply absolute top-0 left-0 w-full h-full object-cover rounded-lg;
+}
+
