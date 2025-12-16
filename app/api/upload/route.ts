@@ -138,10 +138,23 @@ export async function POST(request: NextRequest) {
     console.log('文件读取完成，大小:', (bytes.byteLength / 1024 / 1024).toFixed(2), 'MB')
     const buffer = Buffer.from(bytes)
 
-    // 上传文件到存储提供商
+    // 准备元数据
+    const title = (formData.get('title') as string) || file.name || '未命名文件'
+    const description = (formData.get('description') as string) || ''
+    const location = (formData.get('location') as string) || ''
+
+    // 上传文件到存储提供商（包含元数据）
     console.log('开始上传文件到存储提供商...')
     const contentType = file.type || 'application/octet-stream'
-    const url = await storage.uploadFile(buffer, filename, contentType)
+    const metadata = {
+      title,
+      description,
+      date: dateValue,
+      location,
+      type: isImage ? 'image' : 'video',
+    }
+
+    const url = await storage.uploadFile(buffer, filename, contentType, metadata)
     console.log('文件上传成功，URL:', url)
 
     // 处理缩略图
@@ -206,20 +219,13 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    const memory = await addMemory({
-      title: (formData.get('title') as string) || file.name || '未命名文件',
-      description: (formData.get('description') as string) || undefined,
-      date: dateValue,
-      location: (formData.get('location') as string) || undefined,
-      url,
-      thumbnail,
-      type: isImage ? 'image' : 'video',
-    })
-    console.log('上传完成，记忆ID:', memory.id)
+    console.log('上传完成，文件已保存到 Cloudinary')
 
     return NextResponse.json({
       success: true,
-      memory,
+      url,
+      thumbnail,
+      filename,
     })
   } catch (error) {
     console.error('Upload error:', error)
