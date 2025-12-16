@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
     }
     
     const memory = await addMemory({
-      title: (formData.get('title') as string) || file.name,
+      title: (formData.get('title') as string) || file.name || '未命名文件',
       description: (formData.get('description') as string) || undefined,
       date: dateValue,
       location: (formData.get('location') as string) || undefined,
