@@ -7,6 +7,11 @@ import { createStorageProvider } from '@/lib/storage/factory'
 export const runtime = 'nodejs'
 export const maxDuration = 60 // 60秒超时
 
+// 在 Netlify 上设置环境变量
+if (typeof process !== 'undefined') {
+  process.env.NETLIFY = process.env.NETLIFY || (process.env.NETLIFY_DEV ? 'true' : 'false')
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log('开始处理上传请求...')
@@ -160,10 +165,24 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Upload error:', error)
     const errorMessage = error instanceof Error ? error.message : '未知错误'
+    const errorStack = error instanceof Error ? error.stack : undefined
+    
+    // 在 Netlify 上，始终返回详细错误信息以便调试
+    console.error('Error details:', {
+      message: errorMessage,
+      stack: errorStack,
+      storageType: process.env.STORAGE_TYPE,
+      hasCloudName: !!process.env.CLOUDINARY_CLOUD_NAME,
+      hasApiKey: !!process.env.CLOUDINARY_API_KEY,
+      hasApiSecret: !!process.env.CLOUDINARY_API_SECRET,
+    })
+    
     return NextResponse.json(
       { 
         error: '上传失败，请重试',
-        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+        details: errorMessage, // 始终返回详细错误信息
+        storageType: process.env.STORAGE_TYPE,
+        hasCloudinaryConfig: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
       },
       { status: 500 }
     )

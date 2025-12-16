@@ -8,15 +8,31 @@ import type { StorageProvider } from './index'
 export class CloudinaryStorage implements StorageProvider {
   constructor() {
     // 配置 Cloudinary
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME
+    const apiKey = process.env.CLOUDINARY_API_KEY
+    const apiSecret = process.env.CLOUDINARY_API_SECRET
+    
+    if (!cloudName || !apiKey || !apiSecret) {
+      throw new Error(`Cloudinary 配置不完整: cloudName=${!!cloudName}, apiKey=${!!apiKey}, apiSecret=${!!apiSecret}`)
+    }
+    
+    console.log('配置 Cloudinary:', {
+      cloudName: cloudName.substring(0, 3) + '...', // 只显示前3个字符，保护隐私
+      apiKey: apiKey.substring(0, 3) + '...',
+      apiSecret: apiSecret ? '已设置' : '未设置',
+    })
+    
     cloudinary.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
-      api_key: process.env.CLOUDINARY_API_KEY!,
-      api_secret: process.env.CLOUDINARY_API_SECRET!,
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret,
     })
   }
 
   async uploadFile(file: Buffer, filename: string, contentType: string): Promise<string> {
     return new Promise((resolve, reject) => {
+      console.log('开始上传文件到 Cloudinary:', { filename, contentType, size: file.length })
+      
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: 'bessie-growth',
@@ -25,12 +41,19 @@ export class CloudinaryStorage implements StorageProvider {
         },
         (error, result) => {
           if (error) {
-            reject(error)
+            console.error('Cloudinary 上传错误:', error)
+            reject(new Error(`Cloudinary 上传失败: ${error.message || JSON.stringify(error)}`))
           } else {
+            console.log('Cloudinary 上传成功:', result?.secure_url)
             resolve(result!.secure_url)
           }
         }
       )
+
+      uploadStream.on('error', (err) => {
+        console.error('Cloudinary 上传流错误:', err)
+        reject(new Error(`Cloudinary 上传流错误: ${err.message || JSON.stringify(err)}`))
+      })
 
       uploadStream.end(file)
     })

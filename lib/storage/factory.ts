@@ -19,9 +19,16 @@ export function createStorageProvider(): StorageProvider {
   switch (storageType) {
     case 'cloudinary':
       if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-        console.warn('Cloudinary 配置不完整，回退到本地存储')
+        console.error('Cloudinary 配置不完整，回退到本地存储')
+        console.error('配置检查:', {
+          STORAGE_TYPE: process.env.STORAGE_TYPE,
+          CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ? '已设置' : '未设置',
+          CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ? '已设置' : '未设置',
+          CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET ? '已设置' : '未设置',
+        })
         return new LocalStorage()
       }
+      console.log('Cloudinary 配置完整，使用 Cloudinary 存储')
       return new CloudinaryStorage()
 
     case 'r2':

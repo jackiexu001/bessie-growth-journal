@@ -211,8 +211,22 @@ export default function UploadForm() {
         const responseData = await response.json().catch(() => ({}))
 
         if (!response.ok) {
+          // 显示详细的错误信息
           const errorMessage = responseData.error || responseData.details || `上传失败 (状态码: ${response.status})`
-          throw new Error(errorMessage)
+          const fullError = responseData.details 
+            ? `${errorMessage}\n详细信息: ${responseData.details}`
+            : errorMessage
+          
+          console.error('上传失败详情:', {
+            status: response.status,
+            error: responseData.error,
+            details: responseData.details,
+            storageType: responseData.storageType,
+            hasCloudinaryConfig: responseData.hasCloudinaryConfig,
+            fullResponse: responseData,
+          })
+          
+          throw new Error(fullError)
         }
 
         // 更新状态为成功
@@ -427,9 +441,12 @@ export default function UploadForm() {
                   
                   {/* 错误信息 */}
                   {fileItem.status === 'error' && fileItem.error && (
-                    <p className="text-xs text-red-500 mt-1" title={fileItem.error}>
-                      {fileItem.error.length > 20 ? fileItem.error.substring(0, 20) + '...' : fileItem.error}
-                    </p>
+                    <div className="mt-1">
+                      <p className="text-xs text-red-500 font-semibold">上传失败</p>
+                      <p className="text-xs text-red-400 mt-0.5 break-words" title={fileItem.error}>
+                        {fileItem.error}
+                      </p>
+                    </div>
                   )}
                 </motion.div>
               ))}
