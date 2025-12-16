@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       nodeEnv: process.env.NODE_ENV,
     })
     const formData = await request.formData()
-    const file = formData.get('file') as File
+    const file = formData.get('file') as unknown as Blob | null
     
     console.log('文件信息:', {
       name: file?.name,
@@ -29,8 +29,8 @@ export async function POST(request: NextRequest) {
       sizeMB: file ? (file.size / 1024 / 1024).toFixed(2) + 'MB' : 'N/A'
     })
     
-    if (!file || !(file instanceof File)) {
-      console.error('文件对象无效:', file)
+    if (!file || typeof (file as any).arrayBuffer !== 'function') {
+      console.error('文件对象无效或无法读取:', file)
       return NextResponse.json(
         { error: '没有上传文件或文件对象无效' },
         { status: 400 }
@@ -38,8 +38,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 验证文件类型 - 如果 type 为空，尝试从文件扩展名判断
-    let isImage = file.type.startsWith('image/')
-    let isVideo = file.type.startsWith('video/')
+    let isImage = file.type?.startsWith('image/') ?? false
+    let isVideo = file.type?.startsWith('video/') ?? false
     
     // 如果 MIME 类型为空，从文件扩展名判断
     if (!file.type || file.type === '') {
@@ -90,8 +90,8 @@ export async function POST(request: NextRequest) {
       errorMessage = '文件大小超过 10MB 限制'
     }
     
-    if (file.size > maxSize) {
-      const fileSizeMB = (file.size / 1024 / 1024).toFixed(2)
+    if ((file as any).size > maxSize) {
+      const fileSizeMB = ((file as any).size / 1024 / 1024).toFixed(2)
       return NextResponse.json(
         { 
           error: errorMessage,
@@ -107,12 +107,12 @@ export async function POST(request: NextRequest) {
     // 生成唯一文件名
     const timestamp = Date.now()
     const randomStr = Math.random().toString(36).substring(2, 15)
-    const ext = path.extname(file.name)
+    const ext = path.extname(file.name || 'upload')
     const filename = `${timestamp}-${randomStr}${ext}`
 
     // 读取文件内容
     console.log('开始读取文件...')
-    const bytes = await file.arrayBuffer()
+    const bytes = await (file as any).arrayBuffer()
     console.log('文件读取完成，大小:', (bytes.byteLength / 1024 / 1024).toFixed(2), 'MB')
     const buffer = Buffer.from(bytes)
 
