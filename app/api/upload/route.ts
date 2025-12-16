@@ -151,15 +151,23 @@ export async function POST(request: NextRequest) {
       thumbnail = url
     } else if (isVideo) {
       // 检查是否有上传的缩略图
-      const thumbnailFile = formData.get('thumbnail') as File | null
-      if (thumbnailFile && thumbnailFile instanceof File) {
+      const thumbnailInput = formData.get('thumbnail')
+
+      // 在无 File 全局的环境下，使用结构化检查
+      const isValidThumbnail = thumbnailInput &&
+        typeof thumbnailInput === 'object' &&
+        typeof (thumbnailInput as any).arrayBuffer === 'function' &&
+        typeof (thumbnailInput as any).name === 'string'
+
+      if (isValidThumbnail) {
+        const thumbnailFile = thumbnailInput as UploadedFile
         // 上传缩略图
-        const thumbnailExt = path.extname(thumbnailFile.name) || '.jpg'
+        const thumbnailExt = path.extname(thumbnailFile.name || 'thumbnail.jpg')
         const thumbnailFilename = `${timestamp}-${randomStr}-thumb${thumbnailExt}`
-        
+
         const thumbnailBytes = await thumbnailFile.arrayBuffer()
         const thumbnailBuffer = Buffer.from(thumbnailBytes)
-        
+
         thumbnail = await storage.uploadThumbnail(thumbnailBuffer, thumbnailFilename)
         console.log('视频缩略图已上传:', thumbnail)
       } else {
