@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       name: file.name,
       type: file.type,
       size: file.size,
-      sizeMB: (file.size / 1024 / 1024).toFixed(2) + 'MB'
+      sizeMB: file.size ? (file.size / 1024 / 1024).toFixed(2) + 'MB' : 'N/A'
     })
 
     // 验证文件类型 - 如果 type 为空，尝试从文件扩展名判断
@@ -106,8 +106,8 @@ export async function POST(request: NextRequest) {
       errorMessage = '文件大小超过 10MB 限制'
     }
     
-    if ((file.size || 0) > maxSize) {
-      const fileSizeMB = ((file.size || 0) / 1024 / 1024).toFixed(2)
+    if ((file.size ?? 0) > maxSize) {
+      const fileSizeMB = ((file.size ?? 0) / 1024 / 1024).toFixed(2)
       return NextResponse.json(
         { 
           error: errorMessage,
