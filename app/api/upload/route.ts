@@ -140,7 +140,8 @@ export async function POST(request: NextRequest) {
 
     // 上传文件到存储提供商
     console.log('开始上传文件到存储提供商...')
-    const url = await storage.uploadFile(buffer, filename, file.type)
+    const contentType = file.type || 'application/octet-stream'
+    const url = await storage.uploadFile(buffer, filename, contentType)
     console.log('文件上传成功，URL:', url)
 
     // 处理缩略图
