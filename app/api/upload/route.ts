@@ -3,6 +3,14 @@ import path from 'path'
 import { addMemory } from '@/lib/data'
 import { createStorageProvider } from '@/lib/storage/factory'
 
+// 在 Netlify 函数环境中没有浏览器的 File 类型，这里定义一个最小结构类型
+type UploadedFile = {
+  name?: string
+  type?: string
+  size?: number
+  arrayBuffer: () => Promise<ArrayBuffer>
+}
+
 // 配置 API 路由以支持大文件上传
 export const runtime = 'nodejs'
 export const maxDuration = 60 // 60秒超时
@@ -22,8 +30,13 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const fileInput = formData.get('file')
     
-    // 确保是 File 对象（File 继承自 Blob 并添加了 name 属性）
-    if (!fileInput || !(fileInput instanceof File)) {
+    // 在无 File 全局的环境下，使用结构化检查
+    const isValidFile =
+      fileInput &&
+      typeof (fileInput as any).arrayBuffer === 'function' &&
+      (typeof (fileInput as any).size === 'number' || typeof (fileInput as any).size === 'undefined')
+    
+    if (!isValidFile) {
       console.error('文件对象无效:', fileInput)
       return NextResponse.json(
         { error: '没有上传文件或文件对象无效' },
@@ -31,7 +44,7 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    const file = fileInput as File
+    const file = fileInput as UploadedFile
     
     console.log('文件信息:', {
       name: file.name,
@@ -41,12 +54,12 @@ export async function POST(request: NextRequest) {
     })
 
     // 验证文件类型 - 如果 type 为空，尝试从文件扩展名判断
-    let isImage = file.type.startsWith('image/')
-    let isVideo = file.type.startsWith('video/')
+    let isImage = file.type?.startsWith('image/') ?? false
+    let isVideo = file.type?.startsWith('video/') ?? false
     
     // 如果 MIME 类型为空，从文件扩展名判断
     if (!file.type || file.type === '') {
-      const ext = path.extname(file.name).toLowerCase()
+      const ext = path.extname(file.name || '').toLowerCase()
       const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
       const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m4v']
       
@@ -93,8 +106,8 @@ export async function POST(request: NextRequest) {
       errorMessage = '文件大小超过 10MB 限制'
     }
     
-    if (file.size > maxSize) {
-      const fileSizeMB = (file.size / 1024 / 1024).toFixed(2)
+    if ((file.size || 0) > maxSize) {
+      const fileSizeMB = ((file.size || 0) / 1024 / 1024).toFixed(2)
       return NextResponse.json(
         { 
           error: errorMessage,
