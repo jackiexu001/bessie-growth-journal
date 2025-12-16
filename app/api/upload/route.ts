@@ -7,14 +7,18 @@ import { createStorageProvider } from '@/lib/storage/factory'
 export const runtime = 'nodejs'
 export const maxDuration = 60 // 60秒超时
 
-// 在 Netlify 上设置环境变量
-if (typeof process !== 'undefined') {
-  process.env.NETLIFY = process.env.NETLIFY || (process.env.NETLIFY_DEV ? 'true' : 'false')
-}
+// 在 Netlify 上，这些环境变量会自动设置
+// 不需要手动设置
 
 export async function POST(request: NextRequest) {
   try {
     console.log('开始处理上传请求...')
+    console.log('环境信息:', {
+      isNetlify: !!(process.env.NETLIFY || process.env.NETLIFY_DEV || process.env.AWS_LAMBDA_FUNCTION_NAME),
+      storageType: process.env.STORAGE_TYPE,
+      hasCloudinaryConfig: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
+      nodeEnv: process.env.NODE_ENV,
+    })
     const formData = await request.formData()
     const file = formData.get('file') as File
     
@@ -64,11 +68,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 验证文件大小（1024MB限制）
-    const maxSize = 1024 * 1024 * 1024 // 1024MB (1GB)
+    // 验证文件大小（根据存储类型设置不同限制）
+    let maxSize: number
+    let maxSizeMB: number
+    let errorMessage: string
+    
+    if (isImage) {
+      // 图片：Cloudinary 免费计划限制 10MB
+      maxSize = 10 * 1024 * 1024 // 10MB
+      maxSizeMB = 10
+      errorMessage = '图片文件大小超过 10MB 限制（Cloudinary 免费计划限制）'
+    } else if (isVideo) {
+      // 视频：Cloudinary 免费计划限制 100MB
+      maxSize = 100 * 1024 * 1024 // 100MB
+      maxSizeMB = 100
+      errorMessage = '视频文件大小超过 100MB 限制（Cloudinary 免费计划限制）'
+    } else {
+      // 其他文件：10MB
+      maxSize = 10 * 1024 * 1024 // 10MB
+      maxSizeMB = 10
+      errorMessage = '文件大小超过 10MB 限制'
+    }
+    
     if (file.size > maxSize) {
+      const fileSizeMB = (file.size / 1024 / 1024).toFixed(2)
       return NextResponse.json(
-        { error: '文件大小超过1024MB（1GB）限制' },
+        { 
+          error: errorMessage,
+          details: `文件大小：${fileSizeMB}MB，最大允许：${maxSizeMB}MB。如需上传更大文件，请考虑升级 Cloudinary 计划或使用其他云存储服务。`
+        },
         { status: 400 }
       )
     }

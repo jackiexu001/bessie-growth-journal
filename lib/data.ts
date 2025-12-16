@@ -6,7 +6,15 @@ const DATA_DIR = path.join(process.cwd(), 'data')
 const MEMORIES_FILE = path.join(DATA_DIR, 'memories.json')
 
 // 检查是否在 Netlify 环境（只读文件系统）
-const isNetlify = process.env.NETLIFY === 'true' || process.env.NETLIFY_DEV === 'true'
+// Netlify 会自动设置这些环境变量
+const isNetlify = !!(
+  process.env.NETLIFY === 'true' || 
+  process.env.NETLIFY_DEV === 'true' ||
+  process.env.NETLIFY || // Netlify 会自动设置这个变量
+  process.env.AWS_LAMBDA_FUNCTION_NAME || // Netlify Functions 使用 Lambda
+  process.env.VERCEL || // 也检查 Vercel（类似环境）
+  process.env.NEXT_RUNTIME === 'nodejs' // Next.js 在 Netlify 上的运行时
+)
 
 // 内存存储（用于 Netlify 等只读文件系统环境）
 let memoryStore: Memory[] = []
@@ -67,11 +75,15 @@ async function writeMemoriesToFile(memories: Memory[]): Promise<void> {
 export async function getMemories(): Promise<Memory[]> {
   if (isNetlify) {
     // Netlify 环境：从内存读取
+    console.log(`从内存读取数据（Netlify 环境，共 ${memoryStore.length} 条记录）`)
     return memoryStore
   }
   
+  // 本地环境：从文件读取
   await ensureDataDir()
-  return await readMemoriesFromFile()
+  const memories = await readMemoriesFromFile()
+  console.log(`从文件读取数据（本地环境，共 ${memories.length} 条记录）`)
+  return memories
 }
 
 // 根据ID获取回忆
