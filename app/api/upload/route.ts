@@ -20,26 +20,29 @@ export async function POST(request: NextRequest) {
       nodeEnv: process.env.NODE_ENV,
     })
     const formData = await request.formData()
-    const file = formData.get('file') as unknown as Blob | null
+    const fileInput = formData.get('file')
     
-    console.log('文件信息:', {
-      name: file?.name,
-      type: file?.type,
-      size: file?.size,
-      sizeMB: file ? (file.size / 1024 / 1024).toFixed(2) + 'MB' : 'N/A'
-    })
-    
-    if (!file || typeof (file as any).arrayBuffer !== 'function') {
-      console.error('文件对象无效或无法读取:', file)
+    // 确保是 File 对象（File 继承自 Blob 并添加了 name 属性）
+    if (!fileInput || !(fileInput instanceof File)) {
+      console.error('文件对象无效:', fileInput)
       return NextResponse.json(
         { error: '没有上传文件或文件对象无效' },
         { status: 400 }
       )
     }
+    
+    const file = fileInput as File
+    
+    console.log('文件信息:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      sizeMB: (file.size / 1024 / 1024).toFixed(2) + 'MB'
+    })
 
     // 验证文件类型 - 如果 type 为空，尝试从文件扩展名判断
-    let isImage = file.type?.startsWith('image/') ?? false
-    let isVideo = file.type?.startsWith('video/') ?? false
+    let isImage = file.type.startsWith('image/')
+    let isVideo = file.type.startsWith('video/')
     
     // 如果 MIME 类型为空，从文件扩展名判断
     if (!file.type || file.type === '') {
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
     
     if (!isImage && !isVideo) {
       console.error('不支持的文件类型:', {
-        type: file.type,
+        type: file.type || '未知',
         name: file.name,
         ext: path.extname(file.name)
       })
@@ -90,8 +93,8 @@ export async function POST(request: NextRequest) {
       errorMessage = '文件大小超过 10MB 限制'
     }
     
-    if ((file as any).size > maxSize) {
-      const fileSizeMB = ((file as any).size / 1024 / 1024).toFixed(2)
+    if (file.size > maxSize) {
+      const fileSizeMB = (file.size / 1024 / 1024).toFixed(2)
       return NextResponse.json(
         { 
           error: errorMessage,
@@ -107,7 +110,9 @@ export async function POST(request: NextRequest) {
     // 生成唯一文件名
     const timestamp = Date.now()
     const randomStr = Math.random().toString(36).substring(2, 15)
-    const ext = path.extname(file.name || 'upload')
+    // 从文件名获取扩展名，如果没有则根据类型推断
+    const originalName = file.name || 'file'
+    const ext = path.extname(originalName) || (isImage ? '.jpg' : isVideo ? '.mp4' : '')
     const filename = `${timestamp}-${randomStr}${ext}`
 
     // 读取文件内容
