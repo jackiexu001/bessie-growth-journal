@@ -54,12 +54,14 @@ export async function POST(request: NextRequest) {
     })
 
     // 验证文件类型 - 如果 type 为空，尝试从文件扩展名判断
-    let isImage = file.type?.startsWith('image/') ?? false
-    let isVideo = file.type?.startsWith('video/') ?? false
+    const fileName = file.name || ''
+    const fileType = file.type || ''
+    let isImage = fileType.startsWith('image/')
+    let isVideo = fileType.startsWith('video/')
     
     // 如果 MIME 类型为空，从文件扩展名判断
-    if (!file.type || file.type === '') {
-      const ext = path.extname(file.name || '').toLowerCase()
+    if (!fileType || fileType === '') {
+      const ext = path.extname(fileName).toLowerCase()
       const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
       const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m4v']
       
@@ -73,13 +75,15 @@ export async function POST(request: NextRequest) {
     }
     
     if (!isImage && !isVideo) {
+      const fileName = file.name || ''
+      const fileExt = path.extname(fileName)
       console.error('不支持的文件类型:', {
         type: file.type || '未知',
-        name: file.name,
-        ext: path.extname(file.name)
+        name: fileName,
+        ext: fileExt
       })
       return NextResponse.json(
-        { error: `不支持的文件类型。文件类型: ${file.type || '未知'}, 扩展名: ${path.extname(file.name)}` },
+        { error: `不支持的文件类型。文件类型: ${file.type || '未知'}, 扩展名: ${fileExt}` },
         { status: 400 }
       )
     }
