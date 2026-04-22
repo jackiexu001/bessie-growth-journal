@@ -3,254 +3,137 @@ import path from 'path'
 import { addMemory } from '@/lib/data'
 import { createStorageProvider } from '@/lib/storage/factory'
 
-// 在 Netlify 函数环境中没有浏览器的 File 类型，这里定义一个最小结构类型
-type UploadedFile = {
-  name?: string
-  type?: string
-  size?: number
-  arrayBuffer: () => Promise<ArrayBuffer>
-}
-
-// 配置 API 路由以支持大文件上传
 export const runtime = 'nodejs'
-export const maxDuration = 60 // 60秒超时
+export const maxDuration = 300 // 5 minutes for large video uploads
 
-// 在 Netlify 上，这些环境变量会自动设置
-// 不需要手动设置
+const MAX_IMAGE_SIZE = 50 * 1024 * 1024   // 50MB
+const MAX_VIDEO_SIZE = 500 * 1024 * 1024  // 500MB
+
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp']
+const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/webm', 'video/x-flv', 'video/x-ms-wmv', 'video/mp4']
+
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m4v']
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('开始处理上传请求...')
-    console.log('环境信息:', {
-      isNetlify: !!(process.env.NETLIFY || process.env.NETLIFY_DEV || process.env.AWS_LAMBDA_FUNCTION_NAME),
-      storageType: process.env.STORAGE_TYPE,
-      hasCloudinaryConfig: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
-      nodeEnv: process.env.NODE_ENV,
-    })
     const formData = await request.formData()
     const fileInput = formData.get('file')
-    
-    // 在无 File 全局的环境下，使用结构化检查
+
     const isValidFile =
       fileInput &&
       typeof (fileInput as any).arrayBuffer === 'function' &&
       (typeof (fileInput as any).size === 'number' || typeof (fileInput as any).size === 'undefined')
-    
-    if (!isValidFile) {
-      console.error('文件对象无效:', fileInput)
-      return NextResponse.json(
-        { error: '没有上传文件或文件对象无效' },
-        { status: 400 }
-      )
-    }
-    
-    const file = fileInput as UploadedFile
-    
-    console.log('文件信息:', {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      sizeMB: file.size ? (file.size / 1024 / 1024).toFixed(2) + 'MB' : 'N/A'
-    })
 
-    // 验证文件类型 - 如果 type 为空，尝试从文件扩展名判断
+    if (!isValidFile) {
+      return NextResponse.json({ error: '没有上传文件或文件对象无效' }, { status: 400 })
+    }
+
+    const file = fileInput as { name?: string; type?: string; size?: number; arrayBuffer: () => Promise<ArrayBuffer> }
     const fileName = file.name || ''
     const fileType = file.type || ''
-    let isImage = fileType.startsWith('image/')
-    let isVideo = fileType.startsWith('video/')
-    
-    // 如果 MIME 类型为空，从文件扩展名判断
-    if (!fileType || fileType === '') {
-      const ext = path.extname(fileName).toLowerCase()
-      const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
-      const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m4v']
-      
-      if (imageExts.includes(ext)) {
-        isImage = true
-        console.log('从扩展名判断为图片:', ext)
-      } else if (videoExts.includes(ext)) {
-        isVideo = true
-        console.log('从扩展名判断为视频:', ext)
-      }
-    }
-    
+    const ext = path.extname(fileName).toLowerCase()
+
+    let isImage = ALLOWED_IMAGE_TYPES.includes(fileType)
+    let isVideo = ALLOWED_VIDEO_TYPES.includes(fileType)
+
+    // Fallback to extension check when browser doesn't send MIME type
     if (!isImage && !isVideo) {
-      const fileName = file.name || ''
-      const fileExt = path.extname(fileName)
-      console.error('不支持的文件类型:', {
-        type: file.type || '未知',
-        name: fileName,
-        ext: fileExt
-      })
+      if (IMAGE_EXTENSIONS.includes(ext)) isImage = true
+      else if (VIDEO_EXTENSIONS.includes(ext)) isVideo = true
+    }
+
+    if (!isImage && !isVideo) {
       return NextResponse.json(
-        { error: `不支持的文件类型。文件类型: ${file.type || '未知'}, 扩展名: ${fileExt}` },
+        { error: `不支持的文件类型。仅支持图片（JPG/PNG/GIF/WebP）和视频（MP4/MOV/AVI/MKV）` },
         { status: 400 }
       )
     }
 
-    // 验证文件大小（根据存储类型设置不同限制）
-    let maxSize: number
-    let maxSizeMB: number
-    let errorMessage: string
-    
-    if (isImage) {
-      // 图片：Cloudinary 免费计划限制 10MB
-      maxSize = 10 * 1024 * 1024 // 10MB
-      maxSizeMB = 10
-      errorMessage = '图片文件大小超过 10MB 限制（Cloudinary 免费计划限制）'
-    } else if (isVideo) {
-      // 视频：Cloudinary 免费计划限制 100MB
-      maxSize = 100 * 1024 * 1024 // 100MB
-      maxSizeMB = 100
-      errorMessage = '视频文件大小超过 100MB 限制（Cloudinary 免费计划限制）'
-    } else {
-      // 其他文件：10MB
-      maxSize = 10 * 1024 * 1024 // 10MB
-      maxSizeMB = 10
-      errorMessage = '文件大小超过 10MB 限制'
-    }
-    
+    const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE
+    const maxSizeMB = maxSize / 1024 / 1024
     if ((file.size ?? 0) > maxSize) {
       const fileSizeMB = ((file.size ?? 0) / 1024 / 1024).toFixed(2)
       return NextResponse.json(
-        { 
-          error: errorMessage,
-          details: `文件大小：${fileSizeMB}MB，最大允许：${maxSizeMB}MB。如需上传更大文件，请考虑升级 Cloudinary 计划或使用其他云存储服务。`
-        },
+        { error: `文件过大（${fileSizeMB}MB），最大允许 ${maxSizeMB}MB` },
         { status: 400 }
       )
     }
 
-    // 获取存储提供商
-    const storage = createStorageProvider()
-
-    // 生成唯一文件名
-    const timestamp = Date.now()
-    const randomStr = Math.random().toString(36).substring(2, 15)
-    // 从文件名获取扩展名，如果没有则根据类型推断
-    const originalName = file.name || 'file'
-    const ext = path.extname(originalName) || (isImage ? '.jpg' : isVideo ? '.mp4' : '')
-    const filename = `${timestamp}-${randomStr}${ext}`
-
-    // 读取文件内容
-    console.log('开始读取文件...')
-    const bytes = await (file as any).arrayBuffer()
-    console.log('文件读取完成，大小:', (bytes.byteLength / 1024 / 1024).toFixed(2), 'MB')
-    const buffer = Buffer.from(bytes)
-
-    // 准备元数据
-    const title = (formData.get('title') as string) || file.name || '未命名文件'
+    // Parse metadata BEFORE using dateValue
+    const title = (formData.get('title') as string) || fileName || '未命名文件'
     const description = (formData.get('description') as string) || ''
     const location = (formData.get('location') as string) || ''
+    let dateValue = (formData.get('date') as string) || ''
 
-    // 上传文件到存储提供商（包含元数据）
-    console.log('开始上传文件到存储提供商...')
-    const contentType = file.type || 'application/octet-stream'
-    const metadata = {
-      title,
-      description,
-      date: dateValue,
-      location,
-      type: isImage ? 'image' : 'video',
+    if (!dateValue) {
+      const today = new Date()
+      dateValue = today.toISOString().split('T')[0]
+    } else {
+      if (dateValue.includes('T')) dateValue = dateValue.split('T')[0]
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        const parsed = new Date(dateValue)
+        dateValue = isNaN(parsed.getTime())
+          ? new Date().toISOString().split('T')[0]
+          : parsed.toISOString().split('T')[0]
+      }
     }
 
-    const url = await storage.uploadFile(buffer, filename, contentType, metadata)
-    console.log('文件上传成功，URL:', url)
+    const storage = createStorageProvider()
 
-    // 处理缩略图
-    let thumbnail: string | undefined = undefined
+    const timestamp = Date.now()
+    const randomStr = Math.random().toString(36).substring(2, 15)
+    const fileExt = ext || (isImage ? '.jpg' : '.mp4')
+    const filename = `${timestamp}-${randomStr}${fileExt}`
+
+    const bytes = await (file as any).arrayBuffer()
+    const buffer = Buffer.from(bytes)
+
+    const contentType = fileType || 'application/octet-stream'
+    const url = await storage.uploadFile(buffer, filename, contentType)
+
+    // Handle thumbnail
+    let thumbnail: string | undefined
     if (isImage) {
-      // 图片使用自身作为缩略图
       thumbnail = url
-    } else if (isVideo) {
-      // 检查是否有上传的缩略图
+    } else {
       const thumbnailInput = formData.get('thumbnail')
-
-      // 在无 File 全局的环境下，使用结构化检查
-      const isValidThumbnail = thumbnailInput &&
+      const isValidThumbnail =
+        thumbnailInput &&
         typeof thumbnailInput === 'object' &&
         typeof (thumbnailInput as any).arrayBuffer === 'function' &&
         typeof (thumbnailInput as any).name === 'string'
 
       if (isValidThumbnail) {
-        const thumbnailFile = thumbnailInput as UploadedFile
-        // 上传缩略图
-        const thumbnailExt = path.extname(thumbnailFile.name || 'thumbnail.jpg')
-        const thumbnailFilename = `${timestamp}-${randomStr}-thumb${thumbnailExt}`
-
-        const thumbnailBytes = await thumbnailFile.arrayBuffer()
-        const thumbnailBuffer = Buffer.from(thumbnailBytes)
-
-        thumbnail = await storage.uploadThumbnail(thumbnailBuffer, thumbnailFilename)
-        console.log('视频缩略图已上传:', thumbnail)
-      } else {
-        // 如果没有上传缩略图
-        console.log('未提供视频缩略图')
-        thumbnail = undefined
+        const thumbnailFile = thumbnailInput as { name?: string; arrayBuffer: () => Promise<ArrayBuffer> }
+        const thumbExt = path.extname(thumbnailFile.name || 'thumb.jpg')
+        const thumbFilename = `${timestamp}-${randomStr}-thumb${thumbExt}`
+        const thumbBytes = await thumbnailFile.arrayBuffer()
+        thumbnail = await storage.uploadThumbnail(Buffer.from(thumbBytes), thumbFilename)
       }
     }
 
-    // 保存到数据库
-    console.log('保存到数据库...')
-    
-    // 确保日期格式为 YYYY-MM-DD
-    let dateValue = (formData.get('date') as string) || ''
-    if (!dateValue) {
-      // 如果没有提供日期，使用今天的日期，格式为 YYYY-MM-DD
-      const today = new Date()
-      dateValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-    } else {
-      // 如果日期是 ISO 格式（包含时间），只取日期部分
-      if (dateValue.includes('T')) {
-        dateValue = dateValue.split('T')[0]
-      }
-      // 确保格式为 YYYY-MM-DD
-      const dateMatch = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/)
-      if (!dateMatch) {
-        // 如果格式不正确，尝试转换
-        const date = new Date(dateValue)
-        if (!isNaN(date.getTime())) {
-          dateValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-        } else {
-          // 如果无法解析，使用今天的日期
-          const today = new Date()
-          dateValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-        }
-      }
-    }
-    
-    console.log('上传完成，文件已保存到 Cloudinary')
-
-    return NextResponse.json({
-      success: true,
+    // Save metadata to JSON file
+    const memory = await addMemory({
+      title,
+      description: description || undefined,
+      date: dateValue,
+      location: location || undefined,
       url,
       thumbnail,
-      filename,
+      type: isImage ? 'image' : 'video',
     })
+
+    return NextResponse.json({ success: true, url, thumbnail, filename, id: memory.id })
   } catch (error) {
     console.error('Upload error:', error)
-    const errorMessage = error instanceof Error ? error.message : '未知错误'
-    const errorStack = error instanceof Error ? error.stack : undefined
-    
-    // 在 Netlify 上，始终返回详细错误信息以便调试
-    console.error('Error details:', {
-      message: errorMessage,
-      stack: errorStack,
-      storageType: process.env.STORAGE_TYPE,
-      hasCloudName: !!process.env.CLOUDINARY_CLOUD_NAME,
-      hasApiKey: !!process.env.CLOUDINARY_API_KEY,
-      hasApiSecret: !!process.env.CLOUDINARY_API_SECRET,
-    })
-    
+    const isDev = process.env.NODE_ENV === 'development'
     return NextResponse.json(
-      { 
+      {
         error: '上传失败，请重试',
-        details: errorMessage, // 始终返回详细错误信息
-        storageType: process.env.STORAGE_TYPE,
-        hasCloudinaryConfig: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
+        ...(isDev && { details: error instanceof Error ? error.message : '未知错误' }),
       },
       { status: 500 }
     )
   }
 }
-

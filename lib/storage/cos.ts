@@ -1,7 +1,3 @@
-/**
- * 腾讯云 COS 存储实现
- */
-
 import COS from 'cos-nodejs-sdk-v5'
 import type { StorageProvider } from './index'
 
@@ -12,14 +8,26 @@ export class COSStorage implements StorageProvider {
   private publicUrl: string
 
   constructor() {
-    this.bucketName = process.env.COS_BUCKET_NAME!
-    this.region = process.env.COS_REGION || 'ap-guangzhou'
-    this.publicUrl = process.env.COS_PUBLIC_URL || `https://${this.bucketName}.cos.${this.region}.myqcloud.com`
+    const secretId = process.env.COS_SECRET_ID
+    const secretKey = process.env.COS_SECRET_KEY
+    const bucket = process.env.COS_BUCKET_NAME
+    const region = process.env.COS_REGION
 
-    this.client = new COS({
-      SecretId: process.env.COS_SECRET_ID!,
-      SecretKey: process.env.COS_SECRET_KEY!,
-    })
+    if (!secretId || !secretKey) {
+      throw new Error('COS_SECRET_ID 和 COS_SECRET_KEY 必须设置')
+    }
+    if (!bucket) {
+      throw new Error('COS_BUCKET_NAME 必须设置（格式：BucketName-APPID，例如 bessie-1234567890）')
+    }
+    if (!region) {
+      throw new Error('COS_REGION 必须设置（例如 ap-guangzhou、ap-beijing）')
+    }
+
+    this.bucketName = bucket
+    this.region = region
+    this.publicUrl = process.env.COS_PUBLIC_URL || `https://${bucket}.cos.${region}.myqcloud.com`
+
+    this.client = new COS({ SecretId: secretId, SecretKey: secretKey })
   }
 
   async uploadFile(file: Buffer, filename: string, contentType: string): Promise<string> {
@@ -32,12 +40,9 @@ export class COSStorage implements StorageProvider {
           Body: file,
           ContentType: contentType,
         },
-        (err, data) => {
-          if (err) {
-            reject(err)
-          } else {
-            resolve(`${this.publicUrl}/${filename}`)
-          }
+        (err) => {
+          if (err) reject(new Error(`COS 上传失败: ${err.message}`))
+          else resolve(`${this.publicUrl}/${filename}`)
         }
       )
     })
@@ -53,37 +58,41 @@ export class COSStorage implements StorageProvider {
           Body: thumbnail,
           ContentType: 'image/jpeg',
         },
-        (err, data) => {
-          if (err) {
-            reject(err)
-          } else {
-            resolve(`${this.publicUrl}/${filename}`)
-          }
+        (err) => {
+          if (err) reject(new Error(`COS 缩略图上传失败: ${err.message}`))
+          else resolve(`${this.publicUrl}/${filename}`)
         }
       )
     })
   }
 
   async deleteFile(url: string): Promise<void> {
-    // 从 URL 中提取文件名
-    const filename = url.split('/').pop() || ''
+    // Extract the key from the full COS URL, stripping the base URL prefix
+    let key: string
+    if (url.startsWith('http')) {
+      const urlPath = new URL(url).pathname
+      key = urlPath.startsWith('/') ? urlPath.slice(1) : urlPath
+    } else {
+      key = url
+    }
+
+    // Prevent path traversal
+    if (key.includes('..') || key.startsWith('/')) {
+      throw new Error(`非法文件路径: ${key}`)
+    }
 
     return new Promise((resolve, reject) => {
       this.client.deleteObject(
         {
           Bucket: this.bucketName,
           Region: this.region,
-          Key: filename,
+          Key: key,
         },
         (err) => {
-          if (err) {
-            reject(err)
-          } else {
-            resolve()
-          }
+          if (err) reject(new Error(`COS 删除失败: ${err.message}`))
+          else resolve()
         }
       )
     })
   }
 }
-

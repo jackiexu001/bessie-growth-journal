@@ -1,7 +1,7 @@
 {
   "name": "bessie-growth-journal",
   "version": "1.0.0",
-  "description": "A beautiful website to record your baby's growth journey",
+  "description": "A beautiful website to record Bessie's growth journey",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,9 +10,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.948.0",
-    "@supabase/supabase-js": "^2.87.3",
-    "cloudinary": "^2.8.0",
     "cos-nodejs-sdk-v5": "^2.15.4",
     "date-fns": "^3.0.0",
     "framer-motion": "^11.0.0",
