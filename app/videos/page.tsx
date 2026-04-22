@@ -1,6 +1,8 @@
 import Videos from '@/components/Videos'
 import { getMemories } from '@/lib/data'
 
+export const dynamic = 'force-dynamic'
+
 export default async function VideosPage() {
   const memories = await getMemories()
   const videoMemories = memories.filter(m => m.type === 'video')

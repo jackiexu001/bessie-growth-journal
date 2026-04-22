@@ -1,6 +1,8 @@
 import Gallery from '@/components/Gallery'
 import { getMemories } from '@/lib/data'
 
+export const dynamic = 'force-dynamic'
+
 export default async function GalleryPage() {
   const memories = await getMemories()
   // 相册页面只显示照片

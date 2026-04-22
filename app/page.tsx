@@ -4,6 +4,8 @@ import Hero from '@/components/Hero'
 import Timeline from '@/components/Timeline'
 import { getMemories } from '@/lib/data'
 
+export const dynamic = 'force-dynamic'
+
 export default async function Home() {
   const memories = await getMemories()
 
